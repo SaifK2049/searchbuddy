@@ -7,7 +7,7 @@ const { XMLParser, XMLBuilder, XMLValidator } = require('fast-xml-parser');  // 
  */
 
 /*
-btvo7ugssakct2fhxaimngpktfxgbz672cfnliraakcv6pic54wq
+
 */
 function activate(context) {
     // Register the command
