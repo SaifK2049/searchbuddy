@@ -40,6 +40,7 @@
   "dependencies": {
     "@vscode/vsce": "^3.1.1",
     "axios": "^1.7.7",
+    "cheerio": "^1.0.0",
     "fast-xml-parser": "^4.5.0",
     "searchbuddy": "file:"
   }

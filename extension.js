@@ -15,7 +15,7 @@ function activate(context) {
     // Register the command to fetch and display RSS feed in the sidebar
     let fetchRSSCommand = vscode.commands.registerCommand('searchbuddy.fetchRSS', async function () {
         try {
-            const response = await axios.get('https://www.gju.edu.jo/gju-news');
+            const response = await axios.get('https://www.gju.edu.jo/rss.xml');
             const xmlData = response.data;
 
             if (XMLValidator.validate(xmlData) === true) {
