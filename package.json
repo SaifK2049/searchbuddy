@@ -16,6 +16,10 @@
     "commands": [
       {
         "command": "searchbuddy.Searchexample",
+        "title": "newsGJU"
+      },
+      {
+        "command": "searchbuddy.exploreGJU",
         "title": "searchGJU"
       }
     ]

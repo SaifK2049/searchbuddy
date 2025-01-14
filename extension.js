@@ -1,87 +1,152 @@
 const vscode = require('vscode');
 const axios = require('axios');
-const { XMLParser, XMLBuilder, XMLValidator } = require('fast-xml-parser');  // Import XMLParser, XMLBuilder, and XMLValidator
+const { XMLParser, XMLValidator } = require('fast-xml-parser');  // Import XMLParser, XMLValidator
+
+const GJU_SEARCH_URL = 'https://www.gju.edu.jo/en/search/node/';  // GJU search page base URL
 
 /**
  * @param {vscode.ExtensionContext} context
  */
-
-/*
-
-*/
 function activate(context) {
-    // Register the command
-    let disposable = vscode.commands.registerCommand('searchbuddy.Searchexample', async function () {
+    // Register a new TreeView (Sidebar) to show GJU RSS Feed and Search Results
+    const gjuTreeProvider = new GJUTreeDataProvider();
+    vscode.window.createTreeView('gjuSidebar', { treeDataProvider: gjuTreeProvider });
+
+    // Register the command to fetch and display RSS feed in the sidebar
+    let fetchRSSCommand = vscode.commands.registerCommand('searchbuddy.fetchRSS', async function () {
         try {
-            // Fetch the RSS XML data
-            const response = await axios.get('https://www.gju.edu.jo/rss.xml');
+            const response = await axios.get('https://www.gju.edu.jo/gju-news');
             const xmlData = response.data;
 
-            // Validate the XML data before parsing
             if (XMLValidator.validate(xmlData) === true) {
-                // Create an instance of XMLParser
                 const parser = new XMLParser();
-                
-                // Parse the XML data into a JSON object
                 let jsonObj = parser.parse(xmlData);
-                
-                // Create an instance of XMLBuilder
-                const builder = new XMLBuilder();
-                
-                // Rebuild the XML from the JSON object
-                let sampleXmlData = builder.build(jsonObj);
 
-                // Create and show a new webview
-                const panel = vscode.window.createWebviewPanel(
-                    'searchGJU', // Internal identifier for the webview
-                    'GJU RSS Feed', // Title of the webview
-                    vscode.ViewColumn.One, // Editor column to show the new webview in
-                    {} // Webview options (e.g. enabling scripts)
-                );
-
-                // Convert the parsed data into a pretty-printed HTML table
-                let tableContent = `<h1>GJU RSS Feed</h1><table border="1"><tr><th>Title</th><th>Link</th></tr>`;
-                const items = jsonObj.rss.channel.item;
-
-                for (let item of items) {
-                    tableContent += `<tr><td>${item.title}</td><td><a href="${item.link}" target="_blank">${item.link}</a></td></tr>`;
-                }
-                tableContent += '</table>';
-
-                // Set the content of the webview
-                panel.webview.html = getWebviewContent(tableContent);
-
+                const items = jsonObj?.rss?.channel?.item || [];
+                gjuTreeProvider.setItems(items);
             } else {
                 vscode.window.showErrorMessage('Invalid XML data');
             }
-
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to fetch RSS feed: ${error.message}`);
         }
     });
 
-    context.subscriptions.push(disposable);
+    // Command to search the GJU website
+    let searchGJUCommand = vscode.commands.registerCommand('searchbuddy.searchGJU', async function () {
+        try {
+            const searchTerm = await vscode.window.showInputBox({
+                prompt: 'Enter search term for GJU website',
+                placeHolder: 'e.g., admissions, courses, campus'
+            });
+
+            if (searchTerm) {
+                const searchUrl = `${GJU_SEARCH_URL}${encodeURIComponent(searchTerm)}`;
+                const response = await axios.get(searchUrl);
+                const searchResults = response.data;
+
+                // Display search results in a new webview
+                const panel = vscode.window.createWebviewPanel(
+                    'searchGJU',
+                    `Search Results for "${searchTerm}"`,
+                    vscode.ViewColumn.One,
+                    {}
+                );
+                panel.webview.html = getWebviewContent(searchResults);
+            }
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to search GJU website: ${error.message}`);
+        }
+    });
+
+    context.subscriptions.push(fetchRSSCommand, searchGJUCommand);
 }
 
-// This method is called when your extension is deactivated
-function deactivate() {}
-
 // Helper function to return the webview's HTML content
-function getWebviewContent(tableContent) {
+function getWebviewContent(content) {
     return `<!DOCTYPE html>
         <html lang="en">
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>GJU RSS Feed</title>
+            <title>GJU Webview</title>
+            <style>
+                body {
+                    font-family: Arial, sans-serif;
+                    padding: 20px;
+                }
+                table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin: 20px 0;
+                }
+                table, th, td {
+                    border: 1px solid #ddd;
+                }
+                th, td {
+                    padding: 10px;
+                    text-align: left;
+                }
+                th {
+                    background-color: #f4f4f4;
+                }
+                tr:hover {
+                    background-color: #f1f1f1;
+                }
+            </style>
         </head>
         <body>
-            ${tableContent}
+            ${content}
         </body>
         </html>`;
 }
 
+// TreeDataProvider for the sidebar
+class GJUTreeDataProvider {
+    constructor() {
+        this.items = [];
+        this.onDidChangeTreeData = new vscode.EventEmitter();
+    }
+
+    setItems(items) {
+        this.items = items;
+        this.onDidChangeTreeData.fire();
+    }
+
+    getTreeItem(element) {
+        const treeItem = new vscode.TreeItem(element.title);
+        treeItem.command = {
+            command: 'searchbuddy.openItem',
+            title: 'Open RSS Item',
+            arguments: [element]
+        };
+        treeItem.tooltip = element.title;
+        treeItem.description = element.link;
+        return treeItem;
+    }
+
+    getChildren() {
+        if (!this.items.length) {
+            return [new vscode.TreeItem('No items available')];
+        }
+        return this.items;
+    }
+}
+
+// Command to open a specific RSS item
+vscode.commands.registerCommand('searchbuddy.openItem', function (item) {
+    const panel = vscode.window.createWebviewPanel(
+        'searchGJU',
+        item.title,
+        vscode.ViewColumn.One,
+        {}
+    );
+    panel.webview.html = getWebviewContent(`<h1>${item.title}</h1><p>${item.description}</p><a href="${item.link}" target="_blank">${item.link}</a>`);
+});
+
+function deactivate() {}
+
 module.exports = {
     activate,
     deactivate
-}
+};
